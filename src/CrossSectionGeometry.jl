@@ -4,7 +4,7 @@ module CrossSectionGeometry
 using LinesCurvesNodes, LinearAlgebra, StaticArrays, LazySets, Statistics
 
 
-@kwdef struct ThinWalledGeometry
+struct ThinWalled
 
     L::Vector{Float64}
     θ::Vector{Float64}
@@ -13,11 +13,13 @@ using LinesCurvesNodes, LinearAlgebra, StaticArrays, LazySets, Statistics
     n_r::Vector{Int}
     t::Float64
     centerline_location::String
-    offset::Vector{Float64}
+    offset::Tuple{Float64, Float64}
 
-    center::Vector{Vector{Float64}}
-    left::Vector{Vector{Float64}}
-    right::Vector{Vector{Float64}}
+    unit_node_normals::Vector{Vector{Float64}}
+    
+    centerline_node_XY::Vector{Vector{Float64}}
+    left_surface_node_XY::Vector{Vector{Float64}}
+    right_surface_node_XY::Vector{Vector{Float64}}
 
 end
 
@@ -75,11 +77,11 @@ end
 
 function generate_thin_walled(L, θ, n, r, n_r)
 
-    cross_section_nodes = Geometry.lay_out_cross_section_nodes(L, θ)
+    cross_section_nodes = lay_out_cross_section_nodes(L, θ)
 
-    corners = Geometry.generate_cross_section_rounded_corners(cross_section_nodes, r, n_r)
+    corners = generate_cross_section_rounded_corners(cross_section_nodes, r, n_r)
 
-    flats = Geometry.generate_straight_line_segments(cross_section_nodes, corners, n)
+    flats = generate_straight_line_segments(cross_section_nodes, corners, n)
 
     num_flats = size(flats)[1]
     num_corners = size(corners)[1]
@@ -104,7 +106,7 @@ function generate_thin_walled(L, θ, n, r, n_r)
             # cross_section[i] = round.(unit(cross_section[i][1]), cross_section[i], digits=5)
         # end
 
-        cross_section[i] = Geometry.remove_negative_zeros(cross_section[i])
+        cross_section[i] = remove_negative_zeros(cross_section[i])
 
     end
 
@@ -474,13 +476,13 @@ end
 
 function create_thin_walled_cross_section_geometry(L, θ, n, r, n_r, t; centerline, offset)
 
-    #bring in surface
-    cross_section = Geometry.generate_thin_walled(L, θ, n, r, n_r)
+    #Calculate surface coordinates:
+    cross_section = generate_thin_walled(L, θ, n, r, n_r)
 
-    #calculate surface normals
-    unit_node_normals = Geometry.calculate_cross_section_unit_node_normals(cross_section)
+    #calculate surface normals:
+    unit_node_normals = calculate_cross_section_unit_node_normals(cross_section)
 
-    #following along surface, is centerline to right or left?
+    #Following along the surface, is centerline to right or left?
     if centerline == "to left"
         increment = -t/2
     elseif centerline == "to right"
@@ -489,24 +491,20 @@ function create_thin_walled_cross_section_geometry(L, θ, n, r, n_r, t; centerli
         increment = 0.0
     end
 
-    #calculate centerline geometry, surfaces
-    center = Geometry.get_coords_along_node_normals(cross_section, unit_node_normals, increment)
-    left = Geometry.get_coords_along_node_normals(center, unit_node_normals, -t/2)
-    right = Geometry.get_coords_along_node_normals(center, unit_node_normals, t/2)
+    #Calculate centerline geometry and outside surfaces:
+    center = get_coords_along_node_normals(cross_section, unit_node_normals, increment)
+    left = get_coords_along_node_normals(center, unit_node_normals, -t/2)
+    right = get_coords_along_node_normals(center, unit_node_normals, t/2)
 
-    #convert geometry to tuples, offset coordinates provided by users
-    # convert_to_tuple(data) = [(data[i][1] + offset[1], data[i][2] + offset[2]) for i in eachindex(data)]
-    # left = convert_to_tuple(left)
-    # right = convert_to_tuple(right)
-    # center = convert_to_tuple(center)
+    #Shift surface geometries (for example, to put corner at [0.0, 0.0]):
+    offset_coords(data) = [[data[i][1] + offset[1], data[i][2] + offset[2]] for i in eachindex(data)]
+    left = offset_coords(left)
+    right = offset_coords(right)
+    center = offset_coords(center)
 
-    convert_to_vectors(data) = [[data[i][1] + offset[1], data[i][2] + offset[2]] for i in eachindex(data)]
-    left = convert_to_vectors(left)
-    right = convert_to_vectors(right)
-    center = convert_to_vectors(center)
+    #Organize inputs and outputs:
+    section_geometry = ThinWalled(L, θ, n, r, n_r, t, centerline, offset, unit_node_normals, center, left, right)
 
-    #collection up all the section info
-    section_geometry = (center=center, left=left, right=right)
 
     return section_geometry
 
@@ -516,10 +514,10 @@ end
 function create_thin_walled_cross_section_geometry(L, θ, n, t; centerline, offset)
 
     #bring in surface
-    cross_section = Geometry.generate_thin_walled(L, θ, n)
+    cross_section = generate_thin_walled(L, θ, n)
 
     #calculate surface normals
-    unit_node_normals = Geometry.calculate_cross_section_unit_node_normals(cross_section)
+    unit_node_normals = calculate_cross_section_unit_node_normals(cross_section)
 
     #following along surface, is centerline to right or left?
     if centerline == "to left"
@@ -531,9 +529,9 @@ function create_thin_walled_cross_section_geometry(L, θ, n, t; centerline, offs
     end
 
     #calculate centerline geometry, surfaces
-    center = Geometry.get_coords_along_node_normals(cross_section, unit_node_normals, increment)
-    left = Geometry.get_coords_along_node_normals(center, unit_node_normals, -t/2)
-    right = Geometry.get_coords_along_node_normals(center, unit_node_normals, t/2)
+    center = get_coords_along_node_normals(cross_section, unit_node_normals, increment)
+    left = get_coords_along_node_normals(center, unit_node_normals, -t/2)
+    right = get_coords_along_node_normals(center, unit_node_normals, t/2)
 
     #convert geometry to tuples, offset coordinates provided by users
     # convert_to_tuple(data) = [(data[i][1] + offset[1], data[i][2] + offset[2]) for i in eachindex(data)]
@@ -547,7 +545,11 @@ function create_thin_walled_cross_section_geometry(L, θ, n, t; centerline, offs
     center = convert_to_vectors(center)
 
     #collection up all the section info
-    section_geometry = (center=center, left=left, right=right)
+    r = Float64[]
+    n_r = Float64[]
+    section_geometry = ThinWalled(L, θ, n, r, n_r, t, centerline, offset, unit_node_normals, center, left, right)
+
+    # section_geometry = (center=center, left=left, right=right)
 
     return section_geometry
 
