@@ -738,4 +738,86 @@ end
 
 # end
 
+
+#Linear interpolation for the X coordinate at height `y`, along the segment between
+#nodes `i` and `i+1`.
+function interpolate_x(X, Y, i, y)
+    return X[i] + (y - Y[i]) * (X[i+1] - X[i]) / (Y[i+1] - Y[i])
+end
+
+
+#Identify the web as the longest contiguous run of nodes sharing a common X coordinate
+#(a straight, vertical run), as opposed to the curved corners or the horizontal
+#flanges/lips. `X`, `Y` are a section's ordered perimeter node coordinates (e.g.
+#node_geometry from a SectionProperties.SectionPropertiesObject). Returns the (start,
+#end) node indices bounding that run, in perimeter trace order (not necessarily
+#increasing Y).
+function find_web_segment(X, Y; atol = 1e-6)
+    n = length(X)
+    best_span = -Inf
+    best_range = nothing
+
+    i = 1
+    while i < n
+        if isapprox(X[i], X[i+1]; atol)
+            j = i
+            while (j < n) && isapprox(X[j+1], X[i]; atol)
+                j += 1
+            end
+            span = abs(Y[j] - Y[i])
+            if span > best_span
+                best_span = span
+                best_range = (i, j)
+            end
+            i = j + 1
+        else
+            i += 1
+        end
+    end
+
+    isnothing(best_range) && error("could not identify a vertical web segment in the section geometry")
+
+    return best_range
+end
+
+
+#Insert two new nodes into a section's ordered perimeter node coordinates (X, Y),
+#marking the top and bottom edges of a hole of height `hole_width` centered at the
+#cross-section's vertical centerline (mid-depth). The hole is located automatically in
+#the web (the longest vertical run of nodes), so `X`, `Y` can be the full section
+#perimeter geometry rather than an isolated, pre-extracted web segment.
+#
+#Returns the augmented node coordinates `Xc`, `Yc`, and the indices of the two new
+#boundary nodes within them (`idx_lo` below the hole, `idx_hi` above it).
+function insert_hole_span_boundary_nodes(X, Y, hole_width)
+
+    web_lo, web_hi = find_web_segment(X, Y)
+    i_start, i_end = minmax(web_lo, web_hi)
+
+    y_mid = (Y[web_lo] + Y[web_hi]) / 2
+    y_a = y_mid - hole_width / 2
+    y_b = y_mid + hole_width / 2
+
+    i_a = findfirst(i -> (Y[i] - y_a) * (Y[i+1] - y_a) <= 0, i_start:(i_end-1))
+    i_b = findfirst(i -> (Y[i] - y_b) * (Y[i+1] - y_b) <= 0, i_start:(i_end-1))
+    isnothing(i_a) && error("hole lower bound y=$y_a not found within the web")
+    isnothing(i_b) && error("hole upper bound y=$y_b not found within the web")
+
+    i_a += i_start - 1
+    i_b += i_start - 1
+
+    i_lo, y_lo, i_hi, y_hi = i_a <= i_b ? (i_a, y_a, i_b, y_b) : (i_b, y_b, i_a, y_a)
+
+    x_lo = interpolate_x(X, Y, i_lo, y_lo)
+    x_hi = interpolate_x(X, Y, i_hi, y_hi)
+
+    Xc = vcat(X[1:i_lo], x_lo, X[(i_lo+1):i_hi], x_hi, X[(i_hi+1):end])
+    Yc = vcat(Y[1:i_lo], y_lo, Y[(i_lo+1):i_hi], y_hi, Y[(i_hi+1):end])
+
+    idx_lo = i_lo + 1
+    idx_hi = i_hi + 2   # +1 for the new y_lo node already inserted before it
+
+    return Xc, Yc, idx_lo, idx_hi
+end
+
 end # module CrossSectionGeometry
