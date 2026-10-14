@@ -752,7 +752,12 @@ end
 #node_geometry from a SectionProperties.SectionPropertiesObject). Returns the (start,
 #end) node indices bounding that run, in perimeter trace order (not necessarily
 #increasing Y).
-function find_web_segment(X, Y; atol = 1e-6)
+#
+#The default atol is looser than a bit-exact match because a rounded-corner mesh's
+#corner-tangent nodes can sit ~1e-5 off the flat web's X coordinate (residual
+#floating point error from the corner's trig sweep), which a tight tolerance would
+#wrongly exclude from the web run.
+function find_web_segment(X, Y; atol = 1e-4)
     n = length(X)
     best_span = -Inf
     best_range = nothing

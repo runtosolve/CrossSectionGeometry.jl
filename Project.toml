@@ -1,7 +1,7 @@
 name = "CrossSectionGeometry"
 uuid = "e5713cf4-1a83-4860-95bf-b82253e75fb4"
 authors = ["Cris Moen <cris.moen@runtosolve.com>"]
-version = "0.2.0"
+version = "0.2.1"
 
 [deps]
 LazySets = "b4f0291d-fe17-52bc-9479-3d1a343d9043"
