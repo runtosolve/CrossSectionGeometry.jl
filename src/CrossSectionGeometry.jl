@@ -1,7 +1,7 @@
 module CrossSectionGeometry
 
 
-using LinesCurvesNodes, LinearAlgebra, StaticArrays, LazySets, Statistics
+using LinesCurvesNodes, LinearAlgebra, StaticArrays, Statistics
 
 
 struct ThinWalled
@@ -394,10 +394,10 @@ end
 
 function right_halfspace_normal_correction(A, B, normal) 
 
-    s = LineSegment(A, B)
-    hs = halfspace_right(s) 
     dA = A + 1.0 * normal
-    if !∈(dA, hs)  #is the node normal pointing left or right, if it is pointing left, reverse sign to make it point right
+    #dA is in the closed right halfspace of the directed line A→B when the 2D cross product (B - A) × (dA - A) is <= 0 (same test as LazySets.halfspace_right)
+    in_right_halfspace = (B[1] - A[1]) * (dA[2] - A[2]) - (B[2] - A[2]) * (dA[1] - A[1]) <= 0
+    if !in_right_halfspace  #is the node normal pointing left or right, if it is pointing left, reverse sign to make it point right
         normal = -normal
     end
 
